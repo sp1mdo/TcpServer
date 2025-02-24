@@ -15,7 +15,7 @@
 #include <sys/time.h>
 #include <poll.h>
 
-bool operator<(const pollfd & lhs, const pollfd & rhs)
+bool operator<(const pollfd &lhs, const pollfd &rhs)
 {
     return lhs.fd < rhs.fd;
 }
@@ -24,6 +24,14 @@ BaseTcpServer::BaseTcpServer(uint16_t port) : m_ServerPort(port)
 {
     m_ServerFD = socket(AF_INET, SOCK_STREAM, 0);
     m_pollFds.push_back(pollfd{m_ServerFD, POLLIN | POLLPRI, 0});
+
+    int opt = 1;
+    if (setsockopt(m_ServerFD, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) < 0)
+    {
+        perror("setsockopt");
+        exit(EXIT_FAILURE);
+    }
+
     struct sockaddr_in addr;
     addr.sin_family = AF_INET;
     addr.sin_port = htons(m_ServerPort);
@@ -53,22 +61,22 @@ void BaseTcpServer::updateFds(void)
     {
         m_pollFds.push_back(fd);
     }
-
+    
     m_pollFds_ToRemove.clear();
     m_pollFds_ToAdd.clear();
 }
 
-void BaseTcpServer::Run(void)
+void BaseTcpServer::run(void)
 {
     m_pollFds[0].fd = m_ServerFD;
-    m_pollFds[0].events = POLLIN | POLLPRI ;
+    m_pollFds[0].events = POLLIN | POLLPRI;
 
     while (1)
     {
         updateFds();
-        std::cout << "Clients connected " << m_pollFds.size() -1 << "\n";
+        std::cout << "Clients connected " << m_pollFds.size() - 1 << "\n";
         int pollResult = poll(&m_pollFds[0], m_pollFds.size(), -1);
-        if(pollResult < 0)
+        if (pollResult < 0)
         {
             std::cerr << "poll error\n";
         }
@@ -78,8 +86,8 @@ void BaseTcpServer::Run(void)
             {
                 struct sockaddr_in cliaddr;
                 int addrlen = sizeof(cliaddr);
-                int client_socket = accept(m_ServerFD, (struct sockaddr *)&cliaddr, (socklen_t*) &addrlen);
-                std::cout << "accept success: " << inet_ntoa(cliaddr.sin_addr) <<":"<< (cliaddr.sin_port) << "\n";
+                int client_socket = accept(m_ServerFD, (struct sockaddr *)&cliaddr, (socklen_t *)&addrlen);
+                std::cout << "accept success: " << inet_ntoa(cliaddr.sin_addr) << ":" << (cliaddr.sin_port) << "\n";
                 m_pollFds_ToAdd.emplace(pollfd{client_socket, POLLIN | POLLPRI, 0});
             }
             for (size_t i = 1; i < m_pollFds.size(); i++)
@@ -100,7 +108,7 @@ void BaseTcpServer::Run(void)
                     }
                     else
                     {
-                        ProcessRx(m_pollFds[i].fd, buf,bufSize); 
+                        processRx(m_pollFds[i].fd, buf, bufSize);
                     }
                 }
             }
@@ -108,7 +116,7 @@ void BaseTcpServer::Run(void)
     }
 }
 
-void BaseTcpServer::ProcessRx(const int sock_fd, uint8_t *data, size_t len)
+void BaseTcpServer::processRx(const int sock_fd, uint8_t *data, size_t len)
 {
     write(sock_fd, data, len);
 }

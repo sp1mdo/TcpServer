@@ -12,9 +12,8 @@
 
 #include "BaseServer.hpp"
 
-
 int main(int argc, char **argv)
 {
     BaseTcpServer server(atoi(argv[1]));
-    server.Run();
+    server.run();
 }

@@ -10,7 +10,7 @@ class BaseTcpServer
 {
 public:
     BaseTcpServer(uint16_t port);
-    void Run(void);
+    void run(void);
 
     ~BaseTcpServer()
     {
@@ -25,7 +25,7 @@ public:
 
 private:
     void updateFds(void);
-    void ProcessRx(const int sock_fd, uint8_t *data, size_t len) ;
+    void processRx(const int sock_fd, uint8_t *data, size_t len) ;
     uint16_t m_ServerPort;
     int m_ServerFD;
     std::vector<pollfd> m_pollFds;
