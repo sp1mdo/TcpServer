@@ -14,7 +14,7 @@
 #include <poll.h>
 #include "BaseServer.hpp"
 
-constexpr size_t SIZE=128;
+constexpr size_t SIZE = 128;
 
 bool operator<(const pollfd &lhs, const pollfd &rhs)
 {
@@ -52,10 +52,10 @@ BaseTcpServer::BaseTcpServer(uint16_t port) : m_ServerPort(port)
     std::cout << "server start\n";
 };
 
-int BaseTcpServer::send(const int client_sock, const uint8_t* data, size_t len) const
+int BaseTcpServer::send(const int client_sock, const uint8_t *data, size_t len) const
 {
     size_t to_write = len;
-    int written = -1 ;
+    int written = -1;
     while (to_write > 0)
     {
         written = ::send(client_sock, data + (len - to_write), to_write, 0);
@@ -74,19 +74,19 @@ void BaseTcpServer::updateFds(void)
     std::erase_if(m_pollFds, [&](const pollfd &pfd1)
                   { return std::find_if(m_pollFds_ToRemove.begin(), m_pollFds_ToRemove.end(), [&](const pollfd &pfd2)
                                         { return pfd1.fd == pfd2.fd; }) != m_pollFds_ToRemove.end(); });
-    
-    // Process adding newly connected client pollfds                                   
-    for (auto &fd : m_pollFds_ToAdd)
-    {
-        m_pollFds.push_back(fd);
-    }
 
     // Close sockets with disconnected clients
     for (auto &fd : m_pollFds_ToRemove)
     {
         close(fd.fd);
     }
-    
+
+    // Process adding newly connected client pollfds
+    for (auto &fd : m_pollFds_ToAdd)
+    {
+        m_pollFds.push_back(fd);
+    }
+
     m_pollFds_ToRemove.clear();
     m_pollFds_ToAdd.clear();
 }
@@ -99,11 +99,11 @@ void BaseTcpServer::run(void)
     while (1)
     {
         updateFds();
-        //std::cout << "Clients connected " << m_pollFds.size() - 1 << "\n";
+        // std::cout << "Clients connected " << m_pollFds.size() - 1 << "\n";
         int pollResult = poll(&m_pollFds[0], m_pollFds.size(), -1);
         if (pollResult < 0)
         {
-            std::cerr << "poll error: "<< strerror(errno) << " " << m_pollFds.size() <<"\n";
+            std::cerr << "poll error: " << strerror(errno) << " " << m_pollFds.size() << "\n";
         }
         if (pollResult > 0)
         {
@@ -114,10 +114,10 @@ void BaseTcpServer::run(void)
                 int client_socket = accept(m_ServerFD, (struct sockaddr *)&cliaddr, (socklen_t *)&addrlen);
 
                 // Add client fd to vector od pollfds that are going to be added into main vector of polldfs in next loop cycle
-                if(client_socket != -1) 
+                if (client_socket != -1)
                     m_pollFds_ToAdd.emplace(pollfd{client_socket, POLLIN | POLLPRI, 0});
-                else 
-                    std::cout << "accept fail: " << inet_ntoa(cliaddr.sin_addr) << ":" << (cliaddr.sin_port) << "\n"; 
+                else
+                    std::cout << "accept fail: " << inet_ntoa(cliaddr.sin_addr) << ":" << (cliaddr.sin_port) << "\n";
             }
             for (size_t i = 1; i < m_pollFds.size(); i++)
             {
@@ -127,12 +127,12 @@ void BaseTcpServer::run(void)
                     int bufSize = read(m_pollFds[i].fd, buf, SIZE - 1);
                     if (bufSize == -1)
                     {
-                        //std::cout << "Client [fd=" << m_pollFds[i].fd << "] disconnected\n";
+                        // std::cout << "Client [fd=" << m_pollFds[i].fd << "] disconnected\n";
                         m_pollFds_ToRemove.emplace(m_pollFds[i]);
                     }
                     else if (bufSize == 0)
                     {
-                        //std::cout << "Client [fd=" << m_pollFds[i].fd << "] disconnected\n";
+                        // std::cout << "Client [fd=" << m_pollFds[i].fd << "] disconnected\n";
                         m_pollFds_ToRemove.emplace(m_pollFds[i]);
                     }
                     else
@@ -146,7 +146,7 @@ void BaseTcpServer::run(void)
     }
 }
 
-void BaseTcpServer::processRx(const int sock_fd, uint8_t *data, size_t len)
+void BaseTcpServer::processRx(const int sock_fd, const uint8_t *data, size_t len)
 {
     write(sock_fd, data, len);
 }

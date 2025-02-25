@@ -2,15 +2,29 @@
 #include <cstdio>
 #include <cstring>
 #include <memory>
+#include <arpa/inet.h> // for htons etc.
 
 #include "Modbus.h"
-#include <arpa/inet.h> // for htons etc.
 
 uint16_t holdingRegisters[100] = {0};
 uint16_t inputRegisters[100] = {0};
 bool coils[8] = {true, false, false, false, false, false, false, true};
 
-void ModbusServer::processRx(const int sock_fd, uint8_t *data, size_t len)
+void ModbusServer::sendExceptionCode(ExceptionCode code, std::unique_ptr<modbus_query_t> &query, const int sock_fd)
+{
+    modbus_exception_t exception;
+    exception.transaction_id = htons(query->transaction_id);
+    exception.protocol_id = htons(query->protocol_id);
+    exception.length = htons(query->length);
+    exception.unit_id = query->unit_id;
+    exception.function_code = (0x80 | query->function_code);
+    exception.exception_code = static_cast<uint8_t>(code);
+
+    BaseTcpServer::send(sock_fd, reinterpret_cast<uint8_t *>(&exception), sizeof(exception));
+    return;
+}
+
+void ModbusServer::processRx(const int sock_fd, const uint8_t *data, size_t len)
 {
     std::unique_ptr<modbus_query_t> query = parse_modbus_tcp_raw_data((uint8_t *)data, len);
     if (query == NULL)
@@ -23,18 +37,7 @@ void ModbusServer::processRx(const int sock_fd, uint8_t *data, size_t len)
     {
         std::cerr << "other ID\n";
         // Gateway Target Device Failed to Respond (used for invalid slave IDs)
-        uint8_t reply[9];
-        reply[0] = data[0];
-        reply[1] = data[1];
-        reply[2] = 0x00;
-        reply[3] = 0x00;
-        reply[4] = 0x00;
-        reply[5] = 0x03;
-        reply[6] = query->unit_id;
-        reply[7] = data[7] + 0x80;
-        reply[8] = 0x0B;
-
-        BaseTcpServer::send(sock_fd, reply, sizeof(reply));
+        sendExceptionCode(ExceptionCode::GatewayTargetFailedToRespond, query, sock_fd);
         return;
     }
 
@@ -58,9 +61,9 @@ void ModbusServer::processRx(const int sock_fd, uint8_t *data, size_t len)
     uint8_t tmp_bytes = 0;
     uint16_t *offset = (uint16_t *)(send_buf + sizeof(modbus_reply_t));
 
-    switch (query->function_code)
+    switch (static_cast<FunctionCode>(query->function_code))
     {
-    case READ_COILS:
+    case FunctionCode::ReadCoils:
     {
         reply->byte_count = (uint8_t)(query->word_count / 8);
         uint8_t *offset8 = (uint8_t *)offset;
@@ -74,44 +77,48 @@ void ModbusServer::processRx(const int sock_fd, uint8_t *data, size_t len)
         }
         break;
     }
-    case READ_HOLDING_REGISTERS:
+    case FunctionCode::ReadHoldingRegisters:
         reply->byte_count = (uint8_t)(sizeof(uint16_t) * query->word_count);
         for (size_t i = 0; i < reply->byte_count / sizeof(uint16_t); i++)
         {
-            if (query->start_addr + i < 100) // TODO reply invalid data address in such case
+            if (query->start_addr + i < 100)
             {
                 offset[i] = htons(holdingRegisters[(query->start_addr) + i]);
             }
+            else
+                sendExceptionCode(ExceptionCode::IllegalDataAddress, query, sock_fd);
         }
         break;
 
-    case READ_INPUT_REGISTERS:
+    case FunctionCode::ReadInputRegisters:
         reply->byte_count = (uint8_t)(sizeof(uint16_t) * query->word_count);
         for (size_t i = 0; i < reply->byte_count / sizeof(uint16_t); i++)
         {
-            if (query->start_addr + i < 100) // TODO reply invalid data address in such case
+            if (query->start_addr + i < 100)
             {
                 offset[i] = htons(inputRegisters[(query->start_addr) + i]);
             }
+            else
+                sendExceptionCode(ExceptionCode::IllegalDataAddress, query, sock_fd);
         }
         break;
 
-    case WRITE_SINGLE_COIL:
+    case FunctionCode::WriteSingleCoil:
         memcpy((void *)send_buf, (void *)data, 12);
         tmp_bytes = 3;
         break;
 
-    case WRITE_SINGLE_REGISTER:
+    case FunctionCode::WriteSingleRegister:
         holdingRegisters[query->start_addr] = htons(registers[0]);
         memcpy((void *)send_buf, (void *)data, 12);
         reply->byte_count = 3;
         break;
 
-    case WRITE_MULTIPLE_COILS:
-        // TODO
+    case FunctionCode::WriteMultipleCoils:
+        sendExceptionCode(ExceptionCode::IllegalFunction, query, sock_fd);
         break;
 
-    case WRITE_MULTIPLE_REGISTERS:
+    case FunctionCode::WriteMultipleRegisters:
     {
         reply->byte_count = (uint8_t)(sizeof(uint16_t) * query->word_count);
         uint16_t *data_ptr = (uint16_t *)(data + 13);
@@ -122,6 +129,8 @@ void ModbusServer::processRx(const int sock_fd, uint8_t *data, size_t len)
                 holdingRegisters[query->start_addr + i] = ntohs(data_ptr[i]); // yet to check
                 // holdingRegisters[query->start_addr + i] = ((uint8_t *)data)[13 + sizeof(uint16_t) * i] * 256 + ((uint8_t *)data)[14 + sizeof(uint16_t) * i];
             }
+            else
+                sendExceptionCode(ExceptionCode::IllegalDataAddress, query, sock_fd);
         }
 
         memcpy((void *)send_buf, (void *)data, 12);
@@ -130,6 +139,7 @@ void ModbusServer::processRx(const int sock_fd, uint8_t *data, size_t len)
     }
 
     default:
+        sendExceptionCode(ExceptionCode::IllegalFunction, query, sock_fd);
         break;
     }
 
