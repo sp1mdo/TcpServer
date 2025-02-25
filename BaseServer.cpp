@@ -1,6 +1,3 @@
-#ifndef _BASE_SERVER_H
-#define _BASE_SERVER_H
-#include "BaseServer.hpp"
 #include <iostream>
 #include <vector>
 #include <algorithm>
@@ -15,6 +12,9 @@
 #include <sys/time.h>
 #include <cerrno>
 #include <poll.h>
+#include "BaseServer.hpp"
+
+constexpr size_t SIZE=128;
 
 bool operator<(const pollfd &lhs, const pollfd &rhs)
 {
@@ -52,17 +52,36 @@ BaseTcpServer::BaseTcpServer(uint16_t port) : m_ServerPort(port)
     std::cout << "server start\n";
 };
 
+int BaseTcpServer::send(const int client_sock, const uint8_t* data, size_t len) const
+{
+    size_t to_write = len;
+    int written = -1 ;
+    while (to_write > 0)
+    {
+        written = ::send(client_sock, data + (len - to_write), to_write, 0);
+        if (written < 0)
+        {
+            std::cerr << "Error occurred during sending:" << strerror(errno) << "\n";
+        }
+        to_write -= written;
+    }
+    return written;
+}
+
 void BaseTcpServer::updateFds(void)
 {
+    // Remove polldfs from the main vector
     std::erase_if(m_pollFds, [&](const pollfd &pfd1)
                   { return std::find_if(m_pollFds_ToRemove.begin(), m_pollFds_ToRemove.end(), [&](const pollfd &pfd2)
                                         { return pfd1.fd == pfd2.fd; }) != m_pollFds_ToRemove.end(); });
-
+    
+    // Process adding newly connected client pollfds                                   
     for (auto &fd : m_pollFds_ToAdd)
     {
         m_pollFds.push_back(fd);
     }
 
+    // Close sockets with disconnected clients
     for (auto &fd : m_pollFds_ToRemove)
     {
         close(fd.fd);
@@ -93,6 +112,8 @@ void BaseTcpServer::run(void)
                 struct sockaddr_in cliaddr;
                 int addrlen = sizeof(cliaddr);
                 int client_socket = accept(m_ServerFD, (struct sockaddr *)&cliaddr, (socklen_t *)&addrlen);
+
+                // Add client fd to vector od pollfds that are going to be added into main vector of polldfs in next loop cycle
                 if(client_socket != -1) 
                     m_pollFds_ToAdd.emplace(pollfd{client_socket, POLLIN | POLLPRI, 0});
                 else 
@@ -116,6 +137,7 @@ void BaseTcpServer::run(void)
                     }
                     else
                     {
+                        // Handle received data according to your business logic
                         processRx(m_pollFds[i].fd, buf, bufSize);
                     }
                 }
@@ -128,5 +150,3 @@ void BaseTcpServer::processRx(const int sock_fd, uint8_t *data, size_t len)
 {
     write(sock_fd, data, len);
 }
-
-#endif // _BASE_SERVER_H

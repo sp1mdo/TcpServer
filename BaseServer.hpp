@@ -1,16 +1,18 @@
+#ifndef _BASE_SERVER_H
+#define _BASE_SERVER_H
+
 #include <vector>
 #include <iostream>
 #include <poll.h>
 #include <unistd.h>
 #include <set>
 
-constexpr size_t SIZE=128;
-
 class BaseTcpServer
 {
 public:
     BaseTcpServer(uint16_t port);
     void run(void);
+    int send(const int client_sock, const uint8_t* data, size_t len) const ;
 
     virtual ~BaseTcpServer()
     {
@@ -26,9 +28,11 @@ public:
 private:
     void updateFds(void);
     virtual void processRx(const int sock_fd, uint8_t *data, size_t len) ;
+    
     uint16_t m_ServerPort;
     int m_ServerFD;
     std::vector<pollfd> m_pollFds;
     std::set<pollfd> m_pollFds_ToAdd;
     std::set<pollfd> m_pollFds_ToRemove;
 };
+#endif // _BASE_SERVER_H

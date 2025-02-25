@@ -11,6 +11,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED True)
 add_executable(TcpServer
     main.cpp
     BaseServer.cpp
+    Modbus.cpp
 )
 
 # Include directories for header files
