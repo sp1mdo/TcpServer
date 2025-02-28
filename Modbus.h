@@ -71,15 +71,18 @@ class ModbusServer : public BaseTcpServer
 {
 public:
     ModbusServer(uint8_t slave_id, uint16_t port) : BaseTcpServer(port), m_SlaveId(slave_id) {  };
-    void processRx(const int sock_fd, const uint8_t *data, size_t len) override;
+
 
     //std::map<uint16_t, uint16_t *> holdingRegisters;
     //std::map<uint16_t, uint16_t *> inputRegisters;
     
 
 private:
+void processRx(const int sock_fd, const uint8_t *data, size_t len) override;
+void sendWelcomeMessage(const int sock_fd) override;
     void sendExceptionCode(ExceptionCode code, std::unique_ptr<modbus_query_t> &query, const int sock_fd);
-    std::unique_ptr<modbus_query_t> parse_modbus_tcp_raw_data(const uint8_t *data, size_t len);
+    std::string_view exceptionToString(const ExceptionCode my_exception) const noexcept;
+    std::unique_ptr<modbus_query_t> parse_modbus_tcp_raw_data(const uint8_t *data, size_t len) const;
     uint8_t m_SlaveId;
 };
 

@@ -115,7 +115,10 @@ void BaseTcpServer::run(void)
 
                 // Add client fd to vector od pollfds that are going to be added into main vector of polldfs in next loop cycle
                 if (client_socket != -1)
+                {
                     m_pollFds_ToAdd.emplace(pollfd{client_socket, POLLIN | POLLPRI, 0});
+                    sendWelcomeMessage(client_socket);
+                }
                 else
                     std::cout << "accept fail: " << inet_ntoa(cliaddr.sin_addr) << ":" << (cliaddr.sin_port) << "\n";
             }
@@ -139,6 +142,7 @@ void BaseTcpServer::run(void)
                     {
                         // Handle received data according to your business logic
                         processRx(m_pollFds[i].fd, buf, bufSize);
+                        std::cout << " OK \n";
                     }
                 }
             }
@@ -149,4 +153,10 @@ void BaseTcpServer::run(void)
 void BaseTcpServer::processRx(const int sock_fd, const uint8_t *data, size_t len)
 {
     write(sock_fd, data, len);
+}
+
+
+void BaseTcpServer::sendWelcomeMessage(const int sock_fd)
+{
+
 }

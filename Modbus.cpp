@@ -13,6 +13,7 @@ bool coils[8] = {true, false, false, false, false, false, false, true};
 void ModbusServer::sendExceptionCode(ExceptionCode code, std::unique_ptr<modbus_query_t> &query, const int sock_fd)
 {
     modbus_exception_t exception;
+    std::cerr << "Exception: " << exceptionToString(code) << "\n";
     exception.transaction_id = htons(query->transaction_id);
     exception.protocol_id = htons(query->protocol_id);
     exception.length = htons(query->length);
@@ -22,6 +23,11 @@ void ModbusServer::sendExceptionCode(ExceptionCode code, std::unique_ptr<modbus_
 
     BaseTcpServer::send(sock_fd, reinterpret_cast<uint8_t *>(&exception), sizeof(exception));
     return;
+}
+
+void ModbusServer::sendWelcomeMessage(const int sock_fd)
+{
+    
 }
 
 void ModbusServer::processRx(const int sock_fd, const uint8_t *data, size_t len)
@@ -42,14 +48,15 @@ void ModbusServer::processRx(const int sock_fd, const uint8_t *data, size_t len)
     }
 
     uint16_t *registers = (uint16_t *)data + 10;
-    uint8_t *send_buf = new uint8_t[12 + sizeof(uint16_t) * (query->word_count)];
+
+    auto send_buf = std::make_unique<uint8_t[]>(sizeof(modbus_query_t) + sizeof(uint16_t) * (query->word_count));
     if (send_buf == NULL)
     {
         std::cerr << "send_buf is NULL.\n";
         return;
     }
 
-    modbus_reply_t *reply = (modbus_reply_t *)send_buf;
+    modbus_reply_t *reply = (modbus_reply_t *)send_buf.get();
 
     reply->transaction_id = htons(query->transaction_id);
     reply->protocol_id = htons(query->protocol_id);
@@ -59,7 +66,7 @@ void ModbusServer::processRx(const int sock_fd, const uint8_t *data, size_t len)
     reply->byte_count = (uint8_t)(sizeof(uint16_t) * query->word_count);
 
     uint8_t tmp_bytes = 0;
-    uint16_t *offset = (uint16_t *)(send_buf + sizeof(modbus_reply_t));
+    uint16_t *offset = (uint16_t *)(send_buf.get() + sizeof(modbus_reply_t));
 
     switch (static_cast<FunctionCode>(query->function_code))
     {
@@ -86,7 +93,10 @@ void ModbusServer::processRx(const int sock_fd, const uint8_t *data, size_t len)
                 offset[i] = htons(holdingRegisters[(query->start_addr) + i]);
             }
             else
+            {
                 sendExceptionCode(ExceptionCode::IllegalDataAddress, query, sock_fd);
+                return;
+            }
         }
         break;
 
@@ -99,24 +109,30 @@ void ModbusServer::processRx(const int sock_fd, const uint8_t *data, size_t len)
                 offset[i] = htons(inputRegisters[(query->start_addr) + i]);
             }
             else
+            {
                 sendExceptionCode(ExceptionCode::IllegalDataAddress, query, sock_fd);
+                return;
+            }
         }
         break;
 
     case FunctionCode::WriteSingleCoil:
-        memcpy((void *)send_buf, (void *)data, 12);
+        memcpy((void *)send_buf.get(), (void *)data, sizeof(modbus_query_t));
         tmp_bytes = 3;
         break;
 
     case FunctionCode::WriteSingleRegister:
         holdingRegisters[query->start_addr] = htons(registers[0]);
-        memcpy((void *)send_buf, (void *)data, 12);
+        memcpy((void *)send_buf.get(), (void *)data, sizeof(modbus_query_t));
         reply->byte_count = 3;
         break;
 
     case FunctionCode::WriteMultipleCoils:
+    {
         sendExceptionCode(ExceptionCode::IllegalFunction, query, sock_fd);
-        break;
+        return;
+    }
+    break;
 
     case FunctionCode::WriteMultipleRegisters:
     {
@@ -130,10 +146,13 @@ void ModbusServer::processRx(const int sock_fd, const uint8_t *data, size_t len)
                 // holdingRegisters[query->start_addr + i] = ((uint8_t *)data)[13 + sizeof(uint16_t) * i] * 256 + ((uint8_t *)data)[14 + sizeof(uint16_t) * i];
             }
             else
+            {
                 sendExceptionCode(ExceptionCode::IllegalDataAddress, query, sock_fd);
+                return;
+            }
         }
 
-        memcpy((void *)send_buf, (void *)data, 12);
+        memcpy((void *)send_buf.get(), (void *)data, sizeof(modbus_query_t));
         reply->byte_count = 3;
         break;
     }
@@ -144,14 +163,14 @@ void ModbusServer::processRx(const int sock_fd, const uint8_t *data, size_t len)
     }
 
     size_t to_write = sizeof(modbus_reply_t) + reply->byte_count + tmp_bytes;
-    BaseTcpServer::send(sock_fd, send_buf, to_write);
+    BaseTcpServer::send(sock_fd, send_buf.get(), to_write);
 
-    delete[] send_buf;
+    return;
 }
 
-std::unique_ptr<modbus_query_t> ModbusServer::parse_modbus_tcp_raw_data(const uint8_t *data, size_t len)
+std::unique_ptr<modbus_query_t> ModbusServer::parse_modbus_tcp_raw_data(const uint8_t *data, size_t len) const 
 {
-    auto query = std::unique_ptr<modbus_query_t>(new modbus_query_t); // Safer allocation
+    auto query = std::make_unique<modbus_query_t>(); // Safer allocation
     query->transaction_id = ntohs(*(uint16_t *)&data[0]);
     query->protocol_id = ntohs(*(uint16_t *)&data[2]);
     query->length = ntohs(*(uint16_t *)&data[4]);
@@ -161,4 +180,39 @@ std::unique_ptr<modbus_query_t> ModbusServer::parse_modbus_tcp_raw_data(const ui
     query->word_count = ntohs(*(uint16_t *)&data[10]);
 
     return query;
+}
+
+std::string_view ModbusServer::exceptionToString(const ExceptionCode my_exception) const noexcept
+{
+    switch(my_exception)
+    {
+    case ExceptionCode::IllegalFunction:
+        return "Illegal Function";
+
+    case ExceptionCode::IllegalDataAddress:
+        return "Illegal Data Address";
+
+    case ExceptionCode::IllegalDataValue:
+        return "Illegal Data Value";
+
+    case ExceptionCode::ServiceDeviceFailure:
+        return "Service Device Failure";
+
+    case ExceptionCode::ServerDeviceBusy:
+        return "Server Device Busy";
+
+    case ExceptionCode::MemoryParityError:
+        return "Memory Parity Error";
+
+    case ExceptionCode::GatewayPathUnavailable:
+        return "Gateway Path Unavailable";
+
+    case ExceptionCode::GatewayTargetFailedToRespond:
+        return "Gateway Target Failed To Respond";
+
+    default:
+        return "Unknown exception.";
+    }
+
+    return "";
 }
