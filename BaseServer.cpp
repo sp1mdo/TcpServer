@@ -142,21 +142,9 @@ void BaseTcpServer::run(void)
                     {
                         // Handle received data according to your business logic
                         processRx(m_pollFds[i].fd, buf, bufSize);
-                        std::cout << " OK \n";
                     }
                 }
             }
         }
     }
-}
-
-void BaseTcpServer::processRx(const int sock_fd, const uint8_t *data, size_t len)
-{
-    write(sock_fd, data, len);
-}
-
-
-void BaseTcpServer::sendWelcomeMessage(const int sock_fd)
-{
-
 }

@@ -27,8 +27,8 @@ public:
 
 private:
     void updateFds(void);
-    virtual void processRx(const int sock_fd, const uint8_t *data, size_t len) ;
-    virtual void sendWelcomeMessage(const int sock_fd) ;    
+    virtual void processRx(const int sock_fd, const uint8_t *data, size_t len) = 0;
+    virtual void sendWelcomeMessage(const int sock_fd) = 0;    
     uint16_t m_ServerPort;
     int m_ServerFD;
     std::vector<pollfd> m_pollFds;

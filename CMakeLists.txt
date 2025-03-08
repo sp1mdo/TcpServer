@@ -12,7 +12,8 @@ add_executable(TcpServer
     main.cpp
     BaseServer.cpp
     Modbus.cpp
-    telnet.cpp
+    Telnet.cpp
+    Prompt.cpp
 )
 
 # Include directories for header files
